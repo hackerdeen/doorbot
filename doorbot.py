@@ -17,6 +17,9 @@ def unlock():
     
 @app.route('/open', methods=['POST'])
 def open_door():
+    msg = open("msg.txt", "w")
+    msg.write(request.form['command'])
+    msg.close()
     v = gpg.verify(request.form['command'])
     if v.valid and v.username == "hackhub <hub@57north.co>":
         command = gpg.decrypt(request.form['command'])
