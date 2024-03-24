@@ -10,6 +10,7 @@ from secrets import *
 
 last_resp = 0
 report_thresh = 300
+ping_time = 0
 MQTT_BROKER_HOST = "c9cdba1c85374f12ba682b08321a435b.s2.eu.hivemq.cloud"
 MQTT_BROKER_PORT = 8883
 IRCCAT = "localhost:12345"
@@ -39,9 +40,11 @@ def log(msg):
     irc_send(msg)
     
 def on_msg(c, ud, msg):
-    global last_resp, rep_thresh
+    global last_resp, rep_thresh, ping_time
     m = msg.payload.decode("utf-8")
     print(datetime.utcnow(), m)
+    if "ping" in m:
+        ping_time = time.time()
     if "pong" in m:
         last_resp = time.time()
         report_thresh = 300
@@ -64,6 +67,9 @@ def monitor():
         c.publish("cmd", "ping")
         time.sleep(2)
         resp_time = time.time() - last_resp
+        if ping_time and time.time() - ping_time > 20:
+            log(f"Monitoring didn't receive ping back from MQTT broker. Restarting.")
+            return
         if last_resp and  resp_time > report_thresh:
             log( f"Haven't seen a response from doorbot for {resp_time:.0f} seconds")
             report_thresh *= 2
