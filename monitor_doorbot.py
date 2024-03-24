@@ -10,7 +10,7 @@ from secrets import *
 
 last_resp = 0
 report_thresh = 300
-ping_time = 0
+ping_seen_time = 0
 MQTT_BROKER_HOST = "c9cdba1c85374f12ba682b08321a435b.s2.eu.hivemq.cloud"
 MQTT_BROKER_PORT = 8883
 IRCCAT = "localhost:12345"
@@ -40,11 +40,11 @@ def log(msg):
     irc_send(msg)
     
 def on_msg(c, ud, msg):
-    global last_resp, rep_thresh, ping_time
+    global last_resp, rep_thresh, ping_seen_time
     m = msg.payload.decode("utf-8")
     print(datetime.utcnow(), m)
     if "ping" in m:
-        ping_time = time.time()
+        ping_seen_time = time.time()
     if "pong" in m:
         last_resp = time.time()
         report_thresh = 300
@@ -54,7 +54,8 @@ def on_msg(c, ud, msg):
         log("Door unlocked")
 
 def monitor():
-    global last_resp, report_thresh
+    global last_resp, report_thresh, ping_seen_time
+    ping_sent = False
     c = paho.Client(client_id="monitor", userdata=None, protocol=paho.MQTTv5)
     c.username_pw_set(MQTT_BROKER_USER, MQTT_BROKER_PW)
     c.on_message = on_msg
@@ -67,7 +68,7 @@ def monitor():
         c.publish("cmd", "ping")
         time.sleep(2)
         resp_time = time.time() - last_resp
-        if ping_time and time.time() - ping_time > 20:
+        if ping_sent and time.time() - ping_seen_time > 40:
             log(f"Monitoring didn't receive ping back from MQTT broker. Restarting.")
             return
         if last_resp and  resp_time > report_thresh:
