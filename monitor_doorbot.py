@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def irc_send(message):
-    logger.debug("sending: "+message)
+    logger.info("sending: "+message)
     host, port = IRCCAT.split(":")
     port = int(port)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -31,31 +31,26 @@ def irc_send(message):
         s.sendall(message.encode() + b"\n")
         s.close()
     except socket.timeout:
-        logger.info("Timeout connecting to irccat")
+        logger.error("Timeout connecting to irccat")
     except socket.error as e:
-        logger.info("Error sending IRC message (%s): %s", message, e)
+        logger.error("Error sending IRC message (%s): %s", message, e)
 
-def log(msg):
-    logger.info(msg)
-    irc_send(msg)
-    
 def on_msg(c, ud, msg):
-    global last_resp, rep_thresh, ping_seen_time
+    global last_resp, report_thresh, ping_seen_time
     m = msg.payload.decode("utf-8")
-    print(datetime.utcnow(), m)
+    logger.debug(f"received: {m}")
     if "ping" in m:
         ping_seen_time = time.time()
     if "pong" in m:
         last_resp = time.time()
         report_thresh = 300
     if "boot" in m:
-        log("Doorbot booted")
+        irc_send("Doorbot booted")
     if "ACK" in m:#
-        log("Door unlocked")
+        irc_send("Door unlocked")
 
 def monitor():
     global last_resp, report_thresh, ping_seen_time
-    ping_sent = False
     c = paho.Client(client_id="monitor", userdata=None, protocol=paho.MQTTv5)
     c.username_pw_set(MQTT_BROKER_USER, MQTT_BROKER_PW)
     c.on_message = on_msg
@@ -68,11 +63,11 @@ def monitor():
         c.publish("cmd", "ping")
         time.sleep(2)
         resp_time = time.time() - last_resp
-        if ping_sent and time.time() - ping_seen_time > 40:
-            log(f"Monitoring didn't receive ping back from MQTT broker. Restarting.")
+        if time.time() - ping_seen_time > 40:
+            logger.info(f"Monitoring didn't receive ping back from MQTT broker. Restarting.")
             return
         if last_resp and  resp_time > report_thresh:
-            log( f"Haven't seen a response from doorbot for {resp_time:.0f} seconds")
+            irc_send( f"Haven't seen a response from doorbot for {resp_time:.0f} seconds")
             report_thresh *= 2
         time.sleep(28)
     c.loop_stop()
